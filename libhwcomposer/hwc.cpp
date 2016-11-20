@@ -38,7 +38,7 @@
 #include "profiler.h"
 
 using namespace qhwc;
-#define VSYNC_DEBUG 0
+#define VSYNC_DEBUG 1
 
 static int hwc_device_open(const struct hw_module_t* module,
                            const char* name,
@@ -86,7 +86,8 @@ static void hwc_registerProcs(struct hwc_composer_device_1* dev,
 static void reset(hwc_context_t *ctx, int numDisplays,
                   hwc_display_contents_1_t** displays) {
     memset(ctx->listStats, 0, sizeof(ctx->listStats));
-    for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+//    for(int i = 0; i < HWC_NUM_DISPLAY_TYPES; i++) {
+      for(int i = 0; i < numDisplays; i++) {
         hwc_display_contents_1_t *list = displays[i];
         // XXX:SurfaceFlinger no longer guarantees that this
         // value is reset on every prepare. However, for the layer
@@ -213,7 +214,8 @@ static int hwc_prepare(hwc_composer_device_1 *dev, size_t numDisplays,
     ctx->mRotMgr->configBegin();
     ctx->mNeedsRotator = false;
 
-    for (int32_t i = numDisplays; i >= 0; i--) {
+//    for (int32_t i = numDisplays; i >= 0; i--) {
+    for (int32_t i = numDisplays-1; i >= 0; i--) {
         hwc_display_contents_1_t *list = displays[i];
         switch(i) {
             case HWC_DISPLAY_PRIMARY:
@@ -278,7 +280,24 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
     }
     switch(dpy) {
         case HWC_DISPLAY_PRIMARY:
+	    ALOGD("%s: %s display: HWC_DISPLAY_PRIMARY", __FUNCTION__,
+	          blank==1 ? "Blanking":"Unblanking");
             if(blank) {
+// guhl disable vsync here
+	        int vsync_enable;
+	        vsync_enable = ctx->vstate.enable;
+	        ALOGD ("GUHL: VSYNC vsync_enable = %d", vsync_enable);
+	        int enable;
+	        enable = false;
+	        if(vsync_enable){
+		    ret = hwc_vsync_control(ctx, dpy, enable);
+		    if(ret == 0) {
+			ctx->vstate.enable = !!enable;
+			pthread_cond_signal(&ctx->vstate.cond);
+		    }
+	        }            
+	        ALOGD ("GUHL: VSYNC state changed to %s", (enable)?"ENABLED":"DISABLED");
+// guhl end
                 ret = ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK,FB_BLANK_POWERDOWN);
 
                 if(ctx->dpyAttr[HWC_DISPLAY_VIRTUAL].connected == true) {
@@ -454,7 +473,8 @@ static int hwc_set(hwc_composer_device_1 *dev,
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     Locker::Autolock _l(ctx->mBlankLock);
-    for (uint32_t i = 0; i <= numDisplays; i++) {
+//    for (uint32_t i = 0; i <= numDisplays; i++) {
+    for (uint32_t i = 0; i < numDisplays; i++) {
         hwc_display_contents_1_t* list = displays[i];
         switch(i) {
             case HWC_DISPLAY_PRIMARY:
